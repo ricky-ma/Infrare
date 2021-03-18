@@ -1,46 +1,39 @@
 import tensorflow as tf
 import tensorflow_datasets as tfds
+from labelencoder import LabelEncoder
+from utils import preprocess_data
 
 
-def normalize_img(image, label):
-    """Normalizes images: `uint8` -> `float32`."""
-    return tf.cast(image, tf.float32) / 255., label
-
-
-def load_dataset():
-    builder = tfds.builder(name="coco", data_dir="C:/Users/mrric/tensorflow_datasets")
-    config = tfds.download.DownloadConfig(
-        extract_dir="C:/Users/mrric/tensorflow_datasets/coco"
-    )
-    builder.download_and_prepare(download_config=config)
-
+def load_dataset(batch_size):
     # Construct a tf.data.Dataset
-    (ds_train, ds_val), ds_info = tfds.load(
+    (train_dataset, val_dataset), ds_info = tfds.load(
         'coco/2017',
         split=['train', 'validation'],
-        shuffle_files=True,
-        as_supervised=True,
         with_info=True,
-        download=False,
+        data_dir="data"
     )
 
     # Build training pipeline
-    ds_train = ds_train.map(normalize_img, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds_train = ds_train.cache()
-    ds_train = ds_train.shuffle(ds_info.splits['train'].num_examples)
-    ds_train = ds_train.batch(128)
-    ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
+    label_encoder = LabelEncoder()
+    autotune = tf.data.experimental.AUTOTUNE
+    train_dataset = train_dataset.map(preprocess_data, num_parallel_calls=autotune)
+    train_dataset = train_dataset.shuffle(8 * batch_size)
+    train_dataset = train_dataset.padded_batch(
+        batch_size=batch_size, padding_values=(0.0, 1e-8, -1), drop_remainder=True
+    )
+    train_dataset = train_dataset.map(
+        label_encoder.encode_batch, num_parallel_calls=autotune
+    )
+    train_dataset = train_dataset.apply(tf.data.experimental.ignore_errors())
+    train_dataset = train_dataset.prefetch(autotune)
 
     # Build validation pipeline
-    ds_val = ds_val.map(normalize_img, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds_val = ds_val.batch(128)
-    ds_val = ds_val.cache()
-    ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
+    val_dataset = val_dataset.map(preprocess_data, num_parallel_calls=autotune)
+    val_dataset = val_dataset.padded_batch(
+        batch_size=1, padding_values=(0.0, 1e-8, -1), drop_remainder=True
+    )
+    val_dataset = val_dataset.map(label_encoder.encode_batch, num_parallel_calls=autotune)
+    val_dataset = val_dataset.apply(tf.data.experimental.ignore_errors())
+    val_dataset = val_dataset.prefetch(autotune)
 
-    # # Build evaluation pipeline
-    # ds_test = ds_test.map(normalize_img, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    # ds_test = ds_test.batch(128)
-    # ds_test = ds_test.cache()
-    # ds_test = ds_test.prefetch(tf.data.experimental.AUTOTUNE)
-
-    return ds_train, ds_val
+    return train_dataset, val_dataset, ds_info
