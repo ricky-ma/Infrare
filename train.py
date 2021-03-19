@@ -3,8 +3,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from model import CVAE
-from pipeline import load_dataset
-from tqdm import tqdm
+from preprocessing import filter_dataset, dataloader, augment_data
 
 
 def log_normal_pdf(sample, mean, logvar, raxis=1):
@@ -51,30 +50,49 @@ def generate_and_save_images(model, epoch, test_sample):
         plt.axis('off')
 
     # tight_layout minimizes the overlap between 2 sub-plots
-    plt.savefig('image_at_epoch_{:04d}.png'.format(epoch))
+    plt.savefig('vae/results/image_at_epoch_{:04d}.png'.format(epoch))
     plt.show()
 
 
 if __name__ == "__main__":
+    data_dir = 'data/coco2017'
+    classes = ['laptop', 'tv', 'cell phone']
+    mode = 'val2017'
     model_dir = "vae/"
-    batch_size = 32
+    input_image_size = (224, 224)
+    mask_type = 'normal'
+    batch_size = 4
     epochs = 10
     latent_dim = 2  # set the dimensionality of the latent space to a plane for visualization later
     num_examples_to_generate = 16
 
-    # load training and validation data
-    ds_train, ds_val, ds_info = load_dataset(batch_size)
-    print(ds_info)
+    # load and augment training data
+    images, dataset_size, coco = filter_dataset(data_dir, classes, mode)
+    train_gen = dataloader(images, classes, coco, data_dir,
+                         input_image_size, batch_size, mode, mask_type)
+    augGeneratorArgs = dict(featurewise_center=False,
+                            samplewise_center=False,
+                            rotation_range=5,
+                            width_shift_range=0.01,
+                            height_shift_range=0.01,
+                            brightness_range=(0.8, 1.2),
+                            shear_range=0.01,
+                            zoom_range=[1, 1.25],
+                            horizontal_flip=True,
+                            vertical_flip=False,
+                            fill_mode='reflect',
+                            data_format='channels_last')
+    ds_train = augment_data(train_gen, augGeneratorArgs)
 
     # initialize and compile model
     optimizer = tf.keras.optimizers.Adam(1e-4)
     model = CVAE(latent_dim)
 
+    # TODO: fix sample generation
     # Pick a sample of the test set for generating output images
     # assert batch_size >= num_examples_to_generate
-    for test_batch in ds_val.take(1):
-        test_sample = test_batch[0]
-        generate_and_save_images(model, 0, test_sample)
+    # for test_batch in next(ds_train):
+    #     generate_and_save_images(model, 0, test_batch)
 
     # Iterate over epochs.
     for epoch in range(1, epochs + 1):
@@ -82,9 +100,11 @@ if __name__ == "__main__":
 
         # Iterate over the batches of the dataset.
         start_time = time.time()
-        for step, train_x in tqdm(enumerate(ds_train)):
+        for step, train_x in enumerate(ds_train):
+            # Only use image, labels are not necessary
+            train_x = train_x[0]
             loss = train_step(model, train_x, optimizer)
-            if step % 1 == 0:
+            if step % 20 == 0:
                 print("step %d: mean loss = %.4f" % (step, loss))
         end_time = time.time()
 
@@ -96,7 +116,6 @@ if __name__ == "__main__":
         print('Epoch: {}, Test set ELBO: {}, time elapse for current epoch: {}'
               .format(epoch, elbo, end_time - start_time))
 
-        # Output sample from current epoch.
-        for test_batch in ds_val.take(1):
-            test_sample = test_batch[0]
-            generate_and_save_images(model, epoch, test_sample)
+        # # Output sample from current epoch.
+        # for test_batch in next(ds_train):
+        #     generate_and_save_images(model, epoch, test_batch)
