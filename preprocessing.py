@@ -115,10 +115,11 @@ def augment_data(gen, augGeneratorArgs, seed=None):
 
 
 def dataloader(images, classes, coco, folder,
-               input_image_size=(224, 224), batch_size=4, mode='train', mask_type='binary'):
+               input_image_size=(224, 224, 3), batch_size=4, mode='train', mask_type='binary'):
     img_folder = '{}/images/{}'.format(folder, mode)
     dataset_size = len(images)
     catIds = coco.getCatIds(catNms=classes)
+    input_image_size = input_image_size[:2]
 
     c = 0
     while True:
