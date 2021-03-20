@@ -2,7 +2,8 @@ import tensorflow as tf
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from model import CVAE
+from models.cvae import CVAE
+from models.vae import VAE
 from preprocessing import filter_dataset, dataloader, augment_data
 
 
@@ -63,7 +64,8 @@ if __name__ == "__main__":
     mask_type = 'normal'
     batch_size = 4
     epochs = 10
-    latent_dim = 2  # set the dimensionality of the latent space to a plane for visualization later
+    latent_dim = 2
+    intermediate_dim = 2048
     num_examples_to_generate = 16
 
     # load and augment training data
@@ -85,7 +87,8 @@ if __name__ == "__main__":
 
     # initialize and compile model
     optimizer = tf.keras.optimizers.Adam(1e-3)
-    model = CVAE(latent_dim, input_image_size)
+    # model = CVAE(latent_dim, input_image_size)
+    model = VAE(latent_dim, intermediate_dim, input_image_size)
 
     # Pick a sample of the test set for generating output images
     # assert batch_size >= num_examples_to_generate
