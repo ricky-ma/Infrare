@@ -46,7 +46,7 @@ def generate_and_save_images(model, epoch, test_sample):
 
     for i in range(predictions.shape[0]):
         plt.subplot(4, 4, i + 1)
-        plt.imshow(predictions[i, :, :, 0], cmap='gray')
+        plt.imshow(predictions[i, :, :, 0])
         plt.axis('off')
 
     # tight_layout minimizes the overlap between 2 sub-plots
@@ -55,11 +55,11 @@ def generate_and_save_images(model, epoch, test_sample):
 
 
 if __name__ == "__main__":
-    data_dir = 'data/coco2017'
+    data_dir = 'coco2017'
     classes = ['laptop', 'tv', 'cell phone']
     mode = 'val2017'
     model_dir = "vae/"
-    input_image_size = (224, 224)
+    input_image_size = (512, 512, 3)
     mask_type = 'normal'
     batch_size = 4
     epochs = 10
@@ -68,8 +68,7 @@ if __name__ == "__main__":
 
     # load and augment training data
     images, dataset_size, coco = filter_dataset(data_dir, classes, mode)
-    train_gen = dataloader(images, classes, coco, data_dir,
-                         input_image_size, batch_size, mode, mask_type)
+    train_gen = dataloader(images, classes, coco, data_dir, input_image_size, batch_size, mode, mask_type)
     augGeneratorArgs = dict(featurewise_center=False,
                             samplewise_center=False,
                             rotation_range=5,
@@ -85,14 +84,13 @@ if __name__ == "__main__":
     ds_train = augment_data(train_gen, augGeneratorArgs)
 
     # initialize and compile model
-    optimizer = tf.keras.optimizers.Adam(1e-4)
-    model = CVAE(latent_dim)
+    optimizer = tf.keras.optimizers.Adam(1e-3)
+    model = CVAE(latent_dim, input_image_size)
 
-    # TODO: fix sample generation
     # Pick a sample of the test set for generating output images
     # assert batch_size >= num_examples_to_generate
-    # for test_batch in next(ds_train):
-    #     generate_and_save_images(model, 0, test_batch)
+    test_batch = next(ds_train)[0]
+    generate_and_save_images(model, 0, test_batch)
 
     # Iterate over epochs.
     for epoch in range(1, epochs + 1):
@@ -104,18 +102,20 @@ if __name__ == "__main__":
             # Only use image, labels are not necessary
             train_x = train_x[0]
             loss = train_step(model, train_x, optimizer)
-            if step % 20 == 0:
+            if step % 100 == 0:
                 print("step %d: mean loss = %.4f" % (step, loss))
+                generate_and_save_images(model, step, test_batch)
         end_time = time.time()
 
         # Calculate reconstruction error.
         loss = tf.keras.metrics.Mean()
         for test_x in ds_train:
+            test_x = test_x[0]
             loss(compute_loss(model, test_x))
         elbo = -loss.result()
         print('Epoch: {}, Test set ELBO: {}, time elapse for current epoch: {}'
               .format(epoch, elbo, end_time - start_time))
 
         # # Output sample from current epoch.
-        # for test_batch in next(ds_train):
-        #     generate_and_save_images(model, epoch, test_batch)
+        # test_batch = next(ds_train)[0]
+        # generate_and_save_images(model, epoch, test_batch)
