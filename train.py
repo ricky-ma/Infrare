@@ -1,5 +1,7 @@
 import tensorflow as tf
 import time
+import os
+import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 from models.cvae import CVAE
@@ -43,7 +45,7 @@ def generate_and_save_images(model, epoch, test_sample):
     z = model.reparameterize(mean, logvar)
     predictions = model.sample(z)
     num_col = test_sample.shape[0]
-    plt.figure(figsize=(num_col, 2))
+    fig = plt.figure(figsize=(num_col, 2))
 
     for i in range(num_col):
         plt.subplot(2, num_col, i + 1)
@@ -64,12 +66,14 @@ if __name__ == "__main__":
     data_dir = 'coco2017'
     classes = ['airplane', 'train', 'car', 'truck', 'bus']
     mode = 'val2017'
-    model_dir = "vae/"
+    model_dir = 'vae/'
+    log_dir = 'logs'
     input_image_size = (512, 512, 3)
     mask_img = True
     batch_size = 10
     epochs = 2
     latent_dim = 32
+    optimizer = tf.keras.optimizers.Adam(1e-3)
 
     # load and augment training data
     images, dataset_size, coco = filter_dataset(data_dir, classes, mode)
@@ -89,8 +93,23 @@ if __name__ == "__main__":
     ds_train = augment_data(train_gen, augGeneratorArgs)
 
     # initialize and compile model
-    optimizer = tf.keras.optimizers.Adam(1e-3)
     model = CVAE(latent_dim, input_image_size)
+    callback_list = [
+        tf.keras.callbacks.TensorBoard(log_dir=log_dir),
+        tf.keras.callbacks.ModelCheckpoint(
+            filepath=os.path.join(model_dir, "weights", "step{step}"),
+            monitor="loss",
+            save_best_only=False,
+            save_weights_only=True,
+            verbose=1,
+        )
+    ]
+    TC = tf.keras.callbacks.CallbackList(callbacks=callback_list, model=model)
+    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    train_log_dir = log_dir + '/gradient_tape/' + current_time + '/train'
+    test_log_dir = log_dir + '/gradient_tape/' + current_time + '/test'
+    train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+    test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
     # Pick a sample of the test set for generating output images
     # assert batch_size >= num_examples_to_generate
@@ -105,16 +124,19 @@ if __name__ == "__main__":
         start_time = time.time()
         for step, train_x in enumerate(ds_train):
             loss = train_step(model, train_x, optimizer)
+            with train_summary_writer.as_default():
+                tf.summary.scalar('loss', loss, step=step)
             if step % 100 == 0:
                 print("step %d: mean loss = %.4f" % (step, loss))
                 generate_and_save_images(model, step, test_batch)
         end_time = time.time()
 
         # Calculate reconstruction error.
-        # TODO: try cross-entropy loss
         loss = tf.keras.metrics.Mean()
-        for test_x in ds_train:
+        for step, test_x in enumerate(ds_train):
             loss(compute_loss(model, test_x))
+            with test_summary_writer.as_default():
+                tf.summary.scalar('loss', loss, step=step)
         elbo = -loss.result()
         print('Epoch: {}, Test set ELBO: {}, time elapse for current epoch: {}'
               .format(epoch, elbo, end_time - start_time))
@@ -122,3 +144,4 @@ if __name__ == "__main__":
         # # Output sample from current epoch.
         # test_batch = next(ds_train)[0]
         # generate_and_save_images(model, epoch, test_batch)
+    TC.on_train_end('_')
