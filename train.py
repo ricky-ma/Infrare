@@ -3,7 +3,6 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from models.cvae import CVAE
-from models.vae import VAE
 from preprocessing import filter_dataset, dataloader, augment_data
 
 
@@ -43,11 +42,17 @@ def generate_and_save_images(model, epoch, test_sample):
     mean, logvar = model.encode(test_sample)
     z = model.reparameterize(mean, logvar)
     predictions = model.sample(z)
-    fig = plt.figure(figsize=(4, 4))
+    num_col = test_sample.shape[0]
+    plt.figure(figsize=(num_col, 2))
 
-    for i in range(predictions.shape[0]):
-        plt.subplot(4, 4, i + 1)
-        plt.imshow(predictions[i, :, :, 0])
+    for i in range(num_col):
+        plt.subplot(2, num_col, i + 1)
+        plt.imshow(test_sample[i, :, :, :])
+        plt.axis('off')
+
+    for i in range(num_col):
+        plt.subplot(2, num_col, i + 1 + num_col)
+        plt.imshow(predictions[i, :, :, :])
         plt.axis('off')
 
     # tight_layout minimizes the overlap between 2 sub-plots
@@ -57,20 +62,18 @@ def generate_and_save_images(model, epoch, test_sample):
 
 if __name__ == "__main__":
     data_dir = 'coco2017'
-    classes = ['laptop', 'tv', 'cell phone']
+    classes = ['airplane', 'train', 'car', 'truck', 'bus']
     mode = 'val2017'
     model_dir = "vae/"
     input_image_size = (512, 512, 3)
-    mask_type = 'normal'
-    batch_size = 4
-    epochs = 10
-    latent_dim = 2
-    intermediate_dim = 2048
-    num_examples_to_generate = 16
+    mask_img = True
+    batch_size = 10
+    epochs = 2
+    latent_dim = 32
 
     # load and augment training data
     images, dataset_size, coco = filter_dataset(data_dir, classes, mode)
-    train_gen = dataloader(images, classes, coco, data_dir, input_image_size, batch_size, mode, mask_type)
+    train_gen = dataloader(images, classes, coco, data_dir, input_image_size, batch_size, mode, mask_img)
     augGeneratorArgs = dict(featurewise_center=False,
                             samplewise_center=False,
                             rotation_range=5,
@@ -87,12 +90,11 @@ if __name__ == "__main__":
 
     # initialize and compile model
     optimizer = tf.keras.optimizers.Adam(1e-3)
-    # model = CVAE(latent_dim, input_image_size)
-    model = VAE(latent_dim, intermediate_dim, input_image_size)
+    model = CVAE(latent_dim, input_image_size)
 
     # Pick a sample of the test set for generating output images
     # assert batch_size >= num_examples_to_generate
-    test_batch = next(ds_train)[0]
+    test_batch = next(ds_train)
     generate_and_save_images(model, 0, test_batch)
 
     # Iterate over epochs.
@@ -102,8 +104,6 @@ if __name__ == "__main__":
         # Iterate over the batches of the dataset.
         start_time = time.time()
         for step, train_x in enumerate(ds_train):
-            # Only use image, labels are not necessary
-            train_x = train_x[0]
             loss = train_step(model, train_x, optimizer)
             if step % 100 == 0:
                 print("step %d: mean loss = %.4f" % (step, loss))
@@ -111,9 +111,9 @@ if __name__ == "__main__":
         end_time = time.time()
 
         # Calculate reconstruction error.
+        # TODO: try cross-entropy loss
         loss = tf.keras.metrics.Mean()
         for test_x in ds_train:
-            test_x = test_x[0]
             loss(compute_loss(model, test_x))
         elbo = -loss.result()
         print('Epoch: {}, Test set ELBO: {}, time elapse for current epoch: {}'
