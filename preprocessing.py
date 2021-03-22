@@ -49,17 +49,16 @@ def segment_to_polygon(segmentation):
 
 
 def center_crop(img, polygon, input_image_size):
-    width, height = img.shape[1], img.shape[0]
     # get centroid
     x = [p[0] for p in polygon]
     y = [p[1] for p in polygon]
-    centroid = (sum(x) / len(polygon), sum(y) / len(polygon))
+    mid_x, mid_y = int(sum(x) / len(polygon)), int(sum(y) / len(polygon))
     # process crop width and height for max available dimension
-    crop_width = centroid[0] if centroid[0] < input_image_size[1] else img.shape[1]
-    crop_height = centroid[1] if centroid[1] < input_image_size[0] else img.shape[0]
-    mid_x, mid_y = int(width / 2), int(height / 2)
-    cw2, ch2 = int(crop_width / 2), int(crop_height / 2)
-    crop_img = img[mid_y - ch2:mid_y + ch2, mid_x - cw2:mid_x + cw2]
+    cleft = max(int(mid_x - input_image_size[0]/2), 0)
+    cright = int(mid_x + input_image_size[0]/2)
+    ctop = max(int(mid_y - input_image_size[1]/2), 0)
+    cbottom = int(mid_y + input_image_size[1]/2)
+    crop_img = img[ctop:cbottom, cleft:cright]
     return crop_img
 
 
