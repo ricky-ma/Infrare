@@ -68,7 +68,7 @@ def generate_and_save_images(model, epoch, batch, train):
 
 if __name__ == "__main__":
     data_dir = 'coco2017'
-    classes = ['apple', 'orange']
+    classes = ['orange']
     mode = 'val2017'
     model_dir = 'vae/'
     log_dir = 'logs'

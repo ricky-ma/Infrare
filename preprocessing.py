@@ -40,15 +40,43 @@ def filter_dataset(folder, classes=None, mode='train'):
     return unique_images, dataset_size, coco
 
 
-def get_image(image_obj, img_folder, input_image_size):
+def segment_to_polygon(segmentation):
+    polygon = []
+    for partition in segmentation:
+        for x, y in zip(partition[::2], partition[1::2]):
+            polygon.append((x, y))
+    return polygon
+
+
+def center_crop(img, polygon, input_image_size):
+    width, height = img.shape[1], img.shape[0]
+    # get centroid
+    x = [p[0] for p in polygon]
+    y = [p[1] for p in polygon]
+    centroid = (sum(x) / len(polygon), sum(y) / len(polygon))
+    # process crop width and height for max available dimension
+    crop_width = centroid[0] if centroid[0] < input_image_size[1] else img.shape[1]
+    crop_height = centroid[1] if centroid[1] < input_image_size[0] else img.shape[0]
+    mid_x, mid_y = int(width / 2), int(height / 2)
+    cw2, ch2 = int(crop_width / 2), int(crop_height / 2)
+    crop_img = img[mid_y - ch2:mid_y + ch2, mid_x - cw2:mid_x + cw2]
+    return crop_img
+
+
+def get_image(image_obj, img_folder, input_image_size, polygon):
     # Read and normalize an image
     train_img = io.imread(img_folder + '/' + image_obj['file_name']) / 255.0
-    # Resize
-    # TODO: fix cropping to center objects in image
-    train_img = cv2.resize(train_img, input_image_size)
-    if len(train_img.shape) == 3 and train_img.shape[2] == 3:  # If it is a RGB 3 channel image
+    # Crop and resize
+    try:
+        cropped_img = center_crop(train_img, polygon, input_image_size)
+        train_img = cv2.resize(cropped_img, input_image_size)
+    except (AssertionError, TypeError):
+        train_img = cv2.resize(train_img, input_image_size)
+    if len(train_img.shape) == 3 and train_img.shape[2] == 3:
+        # If it is a RGB 3 channel image
         return train_img
-    else:  # To handle a black and white image, increase dimensions to 3
+    else:
+        # To handle a black and white image, increase dimensions to 3
         stacked_img = np.stack((train_img,) * 3, axis=-1)
         return stacked_img
 
@@ -56,23 +84,23 @@ def get_image(image_obj, img_folder, input_image_size):
 def get_binary_masks(image_obj, coco, cat_ids, input_image_size):
     masks = []
     labels = []
+    polygons = []
     ann_ids = coco.getAnnIds(image_obj['id'], catIds=cat_ids, iscrowd=None)
     for ann_id in ann_ids:
         anns = coco.loadAnns(ann_id)
-        mask = np.zeros(input_image_size)
+        mask = coco.annToMask(anns[0])
 
-        for a in range(len(anns)):
-            new_mask = cv2.resize(coco.annToMask(anns[a]), input_image_size)
-            # Threshold because resizing may cause extraneous values
-            new_mask[new_mask >= 0.5] = 1
-            new_mask[new_mask < 0.5] = 0
-            mask = np.maximum(new_mask, mask)
+        polygon = segment_to_polygon(anns[0]['segmentation'])
+        try:
+            cropped_mask = center_crop(mask, polygon, input_image_size)
+            train_mask = cv2.resize(cropped_mask, input_image_size)
+        except (AssertionError, TypeError):
+            train_mask = cv2.resize(mask, input_image_size)
 
-        # Add extra dimension for parity with train_img size [X * X * 3]
-        mask = mask.reshape(input_image_size[0], input_image_size[1])
-        masks.append(mask)
+        masks.append(train_mask)
         labels.append(anns[0]['category_id'])
-    return masks, labels
+        polygons.append(polygon)
+    return masks, labels, polygons
 
 
 def augment_data(gen, aug_generator_args, seed=None):
@@ -109,12 +137,11 @@ def data_generator(images, classes, coco, folder, input_image_size=(224, 224, 3)
         lab = np.empty(batch_size)
         for i in range(c, c + batch_size):  # initially from 0 to batch_size, when c = 0
             image_obj = images[i]
-            # Retrieve image
-            train_img = get_image(image_obj, img_folder, input_image_size)
-            # Mask image
-            masks, labels = get_binary_masks(image_obj, coco, cat_ids, input_image_size)
-            for mask, label in zip(masks, labels):
+            # Retrieve and mask image
+            masks, labels, polygons = get_binary_masks(image_obj, coco, cat_ids, input_image_size)
+            for mask, label, polygon in zip(masks, labels, polygons):
                 mask = mask[:, :, np.newaxis]
+                train_img = get_image(image_obj, img_folder, input_image_size, polygon)
                 train_img = train_img * mask
                 # Add to respective batch sized arrays
                 img[i - c] = train_img
@@ -135,7 +162,7 @@ def dataloader(classes, data_dir, input_image_size, batch_size, mode):
                               rotation_range=5,
                               width_shift_range=0.01,
                               height_shift_range=0.01,
-                              brightness_range=(0.8, 1.2),
+                              brightness_range=(0.9, 1.1),
                               shear_range=0.01,
                               zoom_range=[1, 1.25],
                               horizontal_flip=True,
