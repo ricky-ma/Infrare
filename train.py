@@ -72,7 +72,7 @@ if __name__ == "__main__":
     mode = 'val2017'
     model_dir = 'vae/'
     log_dir = 'logs'
-    input_image_size = (512, 512, 3)
+    input_image_size = (256, 256, 3)
     batch_size = 10
     epochs = 2
     latent_dim = 32
