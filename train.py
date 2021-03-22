@@ -73,12 +73,14 @@ if __name__ == "__main__":
     model_dir = 'vae/'
     log_dir = 'logs'
     input_image_size = (256, 256, 3)
+    num_steps = 6000
     batch_size = 10
     epochs = 2
     latent_dim = 32
     optimizer = tf.keras.optimizers.Adam(1e-3)
 
     # load and augment training data
+    # TODO: split data into training and validation
     ds_train = dataloader(classes, data_dir, input_image_size, batch_size, mode)
 
     # initialize and compile model
@@ -92,6 +94,8 @@ if __name__ == "__main__":
     test_log_dir = log_dir + '/gradient_tape/' + current_time + '/test'
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
     test_summary_writer = tf.summary.create_file_writer(test_log_dir)
+    ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model)
+    manager = tf.train.CheckpointManager(ckpt, "vae/checkpoints", max_to_keep=5)
 
     # Pick a sample of the test set for generating output images
     # assert batch_size >= num_examples_to_generate
@@ -107,27 +111,16 @@ if __name__ == "__main__":
         for step, train_x in enumerate(ds_train):
             imgs, labels = train_x
             loss = train_step(model, imgs, optimizer)
+            ckpt.step.assign_add(1)
             with train_summary_writer.as_default():
                 tf.summary.scalar('loss', loss, step=step)
             if step % 100 == 0:
                 print("step %d: mean loss = %.4f" % (step, loss))
                 generate_and_save_images(model, step, test_batch, True)
-                checkpoint_dir = os.path.dirname('vae/checkpoints/cp-{step:04d}')
-                model.save_weights(checkpoint_dir)
+                save_path = manager.save()
+                print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
+            if step == num_steps:
+                break
         end_time = time.time()
 
-        # Calculate reconstruction error.
-        loss = tf.keras.metrics.Mean()
-        for step, test_x in enumerate(ds_train):
-            imgs, labels = test_x
-            loss(compute_loss(model, test_x))
-            with test_summary_writer.as_default():
-                tf.summary.scalar('loss', loss, step=step)
-        elbo = -loss.result()
-        print('Epoch: {}, Test set ELBO: {}, time elapse for current epoch: {}'
-              .format(epoch, elbo, end_time - start_time))
-
-        # # Output sample from current epoch.
-        # test_batch = next(ds_train)[0]
-        # generate_and_save_images(model, epoch, test_batch)
     TC.on_train_end('_')

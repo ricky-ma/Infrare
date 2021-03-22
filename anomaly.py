@@ -11,7 +11,7 @@ if __name__ == "__main__":
     mode = 'val2017'
     model_dir = 'vae/'
     log_dir = 'logs'
-    input_image_size = (512, 512, 3)
+    input_image_size = (256, 256, 3)
     mask_img = True
     batch_size = 1
     latent_dim = 32
@@ -25,7 +25,10 @@ if __name__ == "__main__":
     test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
     model = CVAE(latent_dim, input_image_size)
-    model.load_weights(latest)
+    optimizer = tf.keras.optimizers.Adam(1e-3)
+    ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model)
+    manager = tf.train.CheckpointManager(ckpt, "vae/checkpoints", max_to_keep=5)
+    ckpt.restore(manager.latest_checkpoint)
 
     # Calculate reconstruction error.
     losses = []
@@ -40,3 +43,5 @@ if __name__ == "__main__":
         losses.append(loss.result())
         labels.append(label)
         generate_and_save_images(model, step, test_x, False)
+        if step == 100:
+            break
