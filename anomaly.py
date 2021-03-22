@@ -7,7 +7,7 @@ from train import compute_loss, generate_and_save_images
 
 if __name__ == "__main__":
     data_dir = 'coco2017'
-    classes = ['apple', 'orange', 'banana']
+    classes = ['banana']
     mode = 'val2017'
     model_dir = 'vae/'
     log_dir = 'logs'
@@ -39,4 +39,4 @@ if __name__ == "__main__":
         print("step %d: mean loss = %.4f" % (step, loss.result()))
         losses.append(loss.result())
         labels.append(label)
-        generate_and_save_images(model, step, img, False)
+        generate_and_save_images(model, step, test_x, False)
