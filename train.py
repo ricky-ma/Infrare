@@ -1,6 +1,5 @@
 import tensorflow as tf
 import time
-import os
 import datetime
 import numpy as np
 import matplotlib.pyplot as plt
@@ -68,8 +67,7 @@ def generate_and_save_images(model, epoch, batch, train):
 
 if __name__ == "__main__":
     data_dir = 'coco2017'
-    classes = ['orange']
-    mode = 'val2017'
+    classes = ['car']
     model_dir = 'vae/'
     log_dir = 'logs'
     input_image_size = (256, 256, 3)
@@ -81,7 +79,8 @@ if __name__ == "__main__":
 
     # load and augment training data
     # TODO: split data into training and validation
-    ds_train = dataloader(classes, data_dir, input_image_size, batch_size, mode)
+    ds_train = dataloader(classes, data_dir, input_image_size, batch_size, 'train2019')
+    ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2019')
 
     # initialize and compile model
     model = CVAE(latent_dim, input_image_size)
@@ -122,5 +121,18 @@ if __name__ == "__main__":
             if step == num_steps:
                 break
         end_time = time.time()
+
+        # Calculate reconstruction error.
+        loss = tf.keras.metrics.Mean()
+        for step, test_x in enumerate(ds_val):
+            imgs, labels = test_x
+            loss(compute_loss(model, test_x))
+            with test_summary_writer.as_default():
+                tf.summary.scalar('loss', loss, step=step)
+            if step == num_steps:
+                break
+        elbo = -loss.result()
+        print('Epoch: {}, Test set ELBO: {}, time elapse for current epoch: {}'
+              .format(epoch, elbo, end_time - start_time))
 
     TC.on_train_end('_')
