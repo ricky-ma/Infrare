@@ -39,7 +39,7 @@ def train_step(model, x, optimizer):
     return loss
 
 
-def generate_and_save_images(model, epoch, batch, train):
+def generate_and_save_images(model, epoch, batch, folder):
     batch_imgs, batch_labels = batch
     mean, logvar = model.encode(batch_imgs)
     z = model.reparameterize(mean, logvar)
@@ -58,16 +58,13 @@ def generate_and_save_images(model, epoch, batch, train):
 
         fig.set_title(int(batch_labels[i]))
 
-    if train:
-        plt.savefig('vae/train_out/image_at_epoch_{:04d}.png'.format(epoch))
-    else:
-        plt.savefig('vae/test_out/image_at_epoch_{:04d}.png'.format(epoch))
+    plt.savefig('vae/{}_out/image_at_epoch_{:04d}.png'.format(folder, epoch))
     plt.show()
 
 
 if __name__ == "__main__":
     data_dir = 'coco2017'
-    classes = ['car']
+    classes = ['airplane']
     model_dir = 'vae/'
     log_dir = 'logs'
     input_image_size = (256, 256, 3)
@@ -77,17 +74,16 @@ if __name__ == "__main__":
     latent_dim = 32
     optimizer = tf.keras.optimizers.Adam(1e-3)
 
-    # load and augment training data
-    # TODO: split data into training and validation
+    # Load and augment training data
     ds_train = dataloader(classes, data_dir, input_image_size, batch_size, 'train2019')
     ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2019')
 
-    # initialize and compile model
+    # Initialize and compile model
     model = CVAE(latent_dim, input_image_size)
-    callback_list = [
-        tf.keras.callbacks.TensorBoard(log_dir=log_dir)
-    ]
+    callback_list = [tf.keras.callbacks.TensorBoard(log_dir=log_dir)]
     TC = tf.keras.callbacks.CallbackList(callbacks=callback_list, model=model)
+
+    # Set up logs for Tensorboard
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     train_log_dir = log_dir + '/gradient_tape/' + current_time + '/train'
     test_log_dir = log_dir + '/gradient_tape/' + current_time + '/test'
@@ -98,7 +94,7 @@ if __name__ == "__main__":
 
     # Pick a sample of the test set for generating output images
     # assert batch_size >= num_examples_to_generate
-    test_batch = next(ds_train)
+    test_batch = next(ds_val)
     generate_and_save_images(model, 0, test_batch, True)
 
     # Iterate over epochs.
@@ -106,32 +102,39 @@ if __name__ == "__main__":
         print("Start of epoch %d" % (epoch,))
 
         # Iterate over the batches of the dataset.
+        train_loss = tf.keras.metrics.Mean()
+        val_loss = tf.keras.metrics.Mean()
         start_time = time.time()
-        for step, train_x in enumerate(ds_train):
-            imgs, labels = train_x
-            loss = train_step(model, imgs, optimizer)
+        for step, (train_x, val_x) in enumerate(zip(ds_train, ds_val)):
+            # Split batches into images and labels
+            train_imgs, train_labels = train_x
+            val_imgs, val_labels = val_x
+
+            # Calculate reconstruction error on training and validation set
+            train_loss(train_step(model, train_imgs, optimizer))
+            val_loss(compute_loss(model, val_imgs))
+
+            # Log losses for Tensorboard viz
             ckpt.step.assign_add(1)
             with train_summary_writer.as_default():
-                tf.summary.scalar('loss', loss, step=step)
-            if step % 100 == 0:
-                print("step %d: mean loss = %.4f" % (step, loss))
-                generate_and_save_images(model, step, test_batch, True)
+                tf.summary.scalar('loss', train_loss.result(), step=step)
+            with test_summary_writer.as_default():
+                tf.summary.scalar('loss', val_loss.result(), step=step)
+
+            # Print progress and display images
+            if step % 200 == 0:
+                print("step %d: mean train loss = %.4f" % (step, train_loss.result()))
+                print("step %d: mean val loss = %.4f" % (step, val_loss.result()))
+                generate_and_save_images(model, step, test_batch, 'train')
+                generate_and_save_images(model, step, val_x, 'val')
                 save_path = manager.save()
                 print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
             if step == num_steps:
                 break
+
         end_time = time.time()
 
-        # Calculate reconstruction error.
-        loss = tf.keras.metrics.Mean()
-        for step, test_x in enumerate(ds_val):
-            imgs, labels = test_x
-            loss(compute_loss(model, test_x))
-            with test_summary_writer.as_default():
-                tf.summary.scalar('loss', loss, step=step)
-            if step == num_steps:
-                break
-        elbo = -loss.result()
+        elbo = -val_loss.result()
         print('Epoch: {}, Test set ELBO: {}, time elapse for current epoch: {}'
               .format(epoch, elbo, end_time - start_time))
 
