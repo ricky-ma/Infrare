@@ -75,8 +75,8 @@ if __name__ == "__main__":
     optimizer = tf.keras.optimizers.Adam(1e-3)
 
     # load and augment training data
-    ds_train = dataloader(classes, data_dir, input_image_size, batch_size, 'train2019', False)
-    ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2019', False)
+    ds_train = dataloader(classes, data_dir, input_image_size, batch_size, 'val2017', True)
+    ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2017', True)
 
     # Initialize and compile model
     model = CVAE(latent_dim, input_image_size)
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     # Pick a sample of the test set for generating output images
     # assert batch_size >= num_examples_to_generate
     test_batch = next(ds_val)
-    generate_and_save_images(model, 0, test_batch, True)
+    generate_and_save_images(model, 0, test_batch, 'train')
 
     # Iterate over epochs.
     for epoch in range(1, epochs + 1):
