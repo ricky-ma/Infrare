@@ -40,7 +40,7 @@ def train_step(model, x, optimizer):
 
 
 def generate_and_save_images(model, epoch, batch, train):
-    batch_imgs, batch_labels = batch
+    batch_imgs, batch_masks, batch_labels = batch
     mean, logvar = model.encode(batch_imgs)
     z = model.reparameterize(mean, logvar)
     predictions = model.sample(z)
@@ -78,9 +78,8 @@ if __name__ == "__main__":
     optimizer = tf.keras.optimizers.Adam(1e-3)
 
     # load and augment training data
-    # TODO: split data into training and validation
-    ds_train = dataloader(classes, data_dir, input_image_size, batch_size, 'train2019')
-    ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2019')
+    ds_train = dataloader(classes, data_dir, input_image_size, batch_size, 'val2017', False)
+    ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2017', False)
 
     # initialize and compile model
     model = CVAE(latent_dim, input_image_size)
@@ -108,7 +107,7 @@ if __name__ == "__main__":
         # Iterate over the batches of the dataset.
         start_time = time.time()
         for step, train_x in enumerate(ds_train):
-            imgs, labels = train_x
+            imgs, masks, labels = train_x
             loss = train_step(model, imgs, optimizer)
             ckpt.step.assign_add(1)
             with train_summary_writer.as_default():
@@ -125,8 +124,8 @@ if __name__ == "__main__":
         # Calculate reconstruction error.
         loss = tf.keras.metrics.Mean()
         for step, test_x in enumerate(ds_val):
-            imgs, labels = test_x
-            loss(compute_loss(model, test_x))
+            imgs, masks, labels = test_x
+            loss(compute_loss(model, imgs))
             with test_summary_writer.as_default():
                 tf.summary.scalar('loss', loss, step=step)
             if step == num_steps:

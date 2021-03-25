@@ -110,7 +110,7 @@ def augment_data(gen, aug_generator_args, seed=None):
     _ = aug_generator_args_mask.pop('brightness_range', None)
     np.random.seed(seed if seed is not None else np.random.choice(range(9999)))
 
-    for img, label in gen:
+    for img, mask, label in gen:
         seed = np.random.choice(range(9999))
         # keep the seeds syncronized otherwise the augmentation of the images
         # will end up different from the augmentation of the masks
@@ -120,11 +120,11 @@ def augment_data(gen, aug_generator_args, seed=None):
                              shuffle=True)
 
         img_aug = next(g_x) / 255.0
-        yield img_aug, label
+        yield img_aug, mask, label
 
 
 def data_generator(images, classes, coco, folder, input_image_size=(224, 224, 3),
-                   batch_size=4, mode='train'):
+                   batch_size=4, mode='train', apply_mask=True):
     img_folder = '{}/images/{}'.format(folder, mode)
     dataset_size = len(images)
     cat_ids = coco.getCatIds(catNms=classes)
@@ -133,29 +133,36 @@ def data_generator(images, classes, coco, folder, input_image_size=(224, 224, 3)
     c = 0
     while True:
         img = np.zeros((batch_size, input_image_size[0], input_image_size[1], 3)).astype('float')
+        mask = np.zeros((batch_size, input_image_size[0], input_image_size[1], 1)).astype('float')
         lab = np.empty(batch_size)
         for i in range(c, c + batch_size):  # initially from 0 to batch_size, when c = 0
             image_obj = images[i]
             # Retrieve and mask image
             masks, labels, polygons = get_binary_masks(image_obj, coco, cat_ids, input_image_size)
-            for mask, label, polygon in zip(masks, labels, polygons):
-                mask = mask[:, :, np.newaxis]
+            for train_mask, train_label, polygon in zip(masks, labels, polygons):
+                train_mask = train_mask[:, :, np.newaxis]
                 train_img = get_image(image_obj, img_folder, input_image_size, polygon)
-                train_img = train_img * mask
+                if apply_mask:
+                    # Mask image to only show object
+                    train_img = train_img * train_mask
+                else:
+                    # Convert mask to boolean array
+                    train_mask = train_mask == 1
                 # Add to respective batch sized arrays
                 img[i - c] = train_img
-                lab[i - c] = label
+                mask[i - c] = train_mask
+                lab[i - c] = train_label
 
         c += batch_size
         if c + batch_size >= dataset_size:
             c = 0
             random.shuffle(images)
-        yield img, lab
+        yield img, mask, lab
 
 
-def dataloader(classes, data_dir, input_image_size, batch_size, mode):
+def dataloader(classes, data_dir, input_image_size, batch_size, mode, apply_mask):
     images, dataset_size, coco = filter_dataset(data_dir, classes, mode)
-    data_gen = data_generator(images, classes, coco, data_dir, input_image_size, batch_size, mode)
+    data_gen = data_generator(images, classes, coco, data_dir, input_image_size, batch_size, mode, apply_mask)
     aug_generator_args = dict(featurewise_center=False,
                               samplewise_center=False,
                               rotation_range=5,
