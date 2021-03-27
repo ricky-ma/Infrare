@@ -4,6 +4,7 @@ import random
 import skimage.io as io
 import cv2
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import matplotlib.pyplot as plt
 
 
 def get_class_name(class_id, cats):
@@ -54,10 +55,10 @@ def center_crop(img, polygon, input_image_size):
     y = [p[1] for p in polygon]
     mid_x, mid_y = int(sum(x) / len(polygon)), int(sum(y) / len(polygon))
     # process crop width and height for max available dimension
-    cleft = max(int(mid_x - input_image_size[0]/2), 0)
-    cright = int(mid_x + input_image_size[0]/2)
-    ctop = max(int(mid_y - input_image_size[1]/2), 0)
-    cbottom = int(mid_y + input_image_size[1]/2)
+    cleft = max(int(mid_x - input_image_size[0] / 2), 0)
+    cright = int(mid_x + input_image_size[0] / 2)
+    ctop = max(int(mid_y - input_image_size[1] / 2), 0)
+    cbottom = int(mid_y + input_image_size[1] / 2)
     crop_img = img[ctop:cbottom, cleft:cright]
     return crop_img
 
@@ -117,14 +118,20 @@ def augment_data(gen, aug_generator_args, seed=None):
         g_x = image_gen.flow(255 * img,
                              batch_size=img.shape[0],
                              seed=seed,
-                             shuffle=True)
+                             shuffle=False)
+
+        g_x_masked = image_gen.flow(255 * mask,
+                                    batch_size=img.shape[0],
+                                    seed=seed,
+                                    shuffle=False)
 
         img_aug = next(g_x) / 255.0
-        yield img_aug, mask, label
+        img_masked_aug = next(g_x_masked) / 255.0
+        yield img_aug, img_masked_aug, label
 
 
 def data_generator(images, classes, coco, folder, input_image_size=(224, 224, 3),
-                   batch_size=4, mode='train', apply_mask=True):
+                   batch_size=4, mode='train'):
     img_folder = '{}/images/{}'.format(folder, mode)
     dataset_size = len(images)
     cat_ids = coco.getCatIds(catNms=classes)
@@ -133,8 +140,8 @@ def data_generator(images, classes, coco, folder, input_image_size=(224, 224, 3)
     c = 0
     while True:
         img = np.zeros((batch_size, input_image_size[0], input_image_size[1], 3)).astype('float')
-        mask = np.zeros((batch_size, input_image_size[0], input_image_size[1], 1)).astype('float')
-        lab = np.empty(batch_size)
+        img_masked = np.zeros((batch_size, input_image_size[0], input_image_size[1], 3)).astype('float')
+        label = np.empty(batch_size)
         for i in range(c, c + batch_size):  # initially from 0 to batch_size, when c = 0
             image_obj = images[i]
             # Retrieve and mask image
@@ -142,27 +149,23 @@ def data_generator(images, classes, coco, folder, input_image_size=(224, 224, 3)
             for train_mask, train_label, polygon in zip(masks, labels, polygons):
                 train_mask = train_mask[:, :, np.newaxis]
                 train_img = get_image(image_obj, img_folder, input_image_size, polygon)
-                if apply_mask:
-                    # Mask image to only show object
-                    train_img = train_img * train_mask
-                else:
-                    # Convert mask to boolean array
-                    train_mask = train_mask == 1
+                train_img_masked = train_img * train_mask
+
                 # Add to respective batch sized arrays
                 img[i - c] = train_img
-                mask[i - c] = train_mask
-                lab[i - c] = train_label
+                img_masked[i - c] = train_img_masked
+                label[i - c] = train_label
 
         c += batch_size
         if c + batch_size >= dataset_size:
             c = 0
             random.shuffle(images)
-        yield img, mask, lab
+        yield img, img_masked, label
 
 
-def dataloader(classes, data_dir, input_image_size, batch_size, mode, apply_mask):
+def dataloader(classes, data_dir, input_image_size, batch_size, mode):
     images, dataset_size, coco = filter_dataset(data_dir, classes, mode)
-    data_gen = data_generator(images, classes, coco, data_dir, input_image_size, batch_size, mode, apply_mask)
+    data_gen = data_generator(images, classes, coco, data_dir, input_image_size, batch_size, mode)
     aug_generator_args = dict(featurewise_center=False,
                               samplewise_center=False,
                               rotation_range=5,

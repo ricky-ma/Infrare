@@ -40,19 +40,23 @@ def train_step(model, x, optimizer):
 
 
 def generate_and_save_images(model, epoch, batch, folder):
-    batch_imgs, batch_masks, batch_labels = batch
-    mean, logvar = model.encode(batch_imgs)
+    batch_imgs, batch_imgs_masked, batch_labels = batch
+    mean, logvar = model.encode(batch_imgs_masked)
     z = model.reparameterize(mean, logvar)
     predictions = model.sample(z)
     num_col = batch_imgs.shape[0]
-    fig = plt.figure(figsize=(num_col, 2))
+    plt.figure(figsize=(num_col, 3))
 
     for i in range(num_col):
-        fig = plt.subplot(2, num_col, i + 1)
+        fig = plt.subplot(3, num_col, i + 1)
         plt.imshow(batch_imgs[i, :, :, :])
         plt.axis('off')
 
-        plt.subplot(2, num_col, i + 1 + num_col)
+        plt.subplot(3, num_col, i + 1 + num_col)
+        plt.imshow(batch_imgs_masked[i, :, :, :])
+        plt.axis('off')
+
+        plt.subplot(3, num_col, i + 1 + num_col + num_col)
         plt.imshow(predictions[i, :, :, :])
         plt.axis('off')
 
@@ -75,8 +79,8 @@ if __name__ == "__main__":
     optimizer = tf.keras.optimizers.Adam(1e-3)
 
     # load and augment training data
-    ds_train = dataloader(classes, data_dir, input_image_size, batch_size, 'val2017', True)
-    ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2017', True)
+    ds_train = dataloader(classes, data_dir, input_image_size, batch_size, 'val2017')
+    ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2017')
 
     # Initialize and compile model
     model = CVAE(latent_dim, input_image_size)
@@ -107,12 +111,12 @@ if __name__ == "__main__":
         start_time = time.time()
         for step, (train_x, val_x) in enumerate(zip(ds_train, ds_val)):
             # Split batches into images and labels
-            train_imgs, train_masks, train_labels = train_x
-            val_imgs, val_masks, val_labels = val_x
+            train_imgs, train_imgs_masked, train_labels = train_x
+            val_imgs, val_imgs_masked, val_labels = val_x
 
             # Calculate reconstruction error on training and validation set
-            train_loss(train_step(model, train_imgs, optimizer))
-            val_loss(compute_loss(model, val_imgs))
+            train_loss(train_step(model, train_imgs_masked, optimizer))
+            val_loss(compute_loss(model, val_imgs_masked))
 
             # Log losses for Tensorboard viz
             ckpt.step.assign_add(1)
