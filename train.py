@@ -6,25 +6,8 @@ import tensorflow as tf
 from scipy.linalg import sqrtm
 from tensorflow.keras.applications import InceptionV3
 from models.cvae import CVAE
+from models.vae import VAE
 from preprocessing import dataloader
-
-
-def log_normal_pdf(sample, mean, logvar, raxis=1):
-    log2pi = tf.math.log(2. * np.pi)
-    return tf.reduce_sum(
-        -.5 * ((sample - mean) ** 2. * tf.exp(-logvar) + logvar + log2pi),
-        axis=raxis)
-
-
-def compute_loss(model, x):
-    mean, logvar = model.encode(x)
-    z = model.reparameterize(mean, logvar)
-    x_logit = model.decode(z)
-    cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=x)
-    logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
-    logpz = log_normal_pdf(z, 0., 0.)
-    logqz_x = log_normal_pdf(z, mean, logvar)
-    return -tf.reduce_mean(logpx_z + logpz - logqz_x)
 
 
 @tf.function
@@ -35,7 +18,7 @@ def train_step(model, x, optimizer):
     update the model's parameters.
     """
     with tf.GradientTape() as tape:
-        loss = compute_loss(model, x)
+        loss = model.compute_loss(x)
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
     return loss
@@ -105,7 +88,7 @@ if __name__ == "__main__":
     ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2017')
 
     # Initialize and compile model
-    model = CVAE(latent_dim, input_image_size)
+    model = VAE(latent_dim, input_image_size)
     model_incept = InceptionV3(include_top=False, pooling='avg', input_shape=input_image_size)
     callback_list = [tf.keras.callbacks.TensorBoard(log_dir=log_dir)]
     TC = tf.keras.callbacks.CallbackList(callbacks=callback_list, model=model)
@@ -142,7 +125,7 @@ if __name__ == "__main__":
 
             # Calculate reconstruction error on training and validation set
             train_loss(train_step(model, train_imgs_masked, optimizer))
-            val_loss(compute_loss(model, val_imgs_masked))
+            val_loss(model.compute_loss(val_imgs_masked))
 
             # Generate samples and compute FID
             train_pred = generate_images(model, train_x)
