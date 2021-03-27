@@ -1,10 +1,9 @@
-from pycocotools.coco import COCO
-import numpy as np
 import random
-import skimage.io as io
 import cv2
+import numpy as np
+import skimage.io as io
+from pycocotools.coco import COCO
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-import matplotlib.pyplot as plt
 
 
 def get_class_name(class_id, cats):

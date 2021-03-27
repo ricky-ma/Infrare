@@ -1,9 +1,8 @@
-import tensorflow as tf
 import datetime
+import tensorflow as tf
 from models.cvae import CVAE
 from preprocessing import dataloader
-from train import compute_loss, generate_and_save_images
-
+from train import compute_loss, show_images, generate_images
 
 if __name__ == "__main__":
     data_dir = 'coco2017'
@@ -49,7 +48,8 @@ if __name__ == "__main__":
 
         # Outlier/anomaly if loss for example is 2x mean loss
         if step_loss > 2*loss.result():
-            generate_and_save_images(model, step, test_x, 'anomaly')
+            pred = generate_images(model, test_x)
+            show_images(step, 0, test_x, pred, 'anomaly')
 
         if step == 200:
             break

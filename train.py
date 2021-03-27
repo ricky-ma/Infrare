@@ -1,12 +1,12 @@
-import tensorflow as tf
-import time
 import datetime
-import numpy as np
+import time
 import matplotlib.pyplot as plt
-from models.cvae import CVAE
-from preprocessing import dataloader
+import numpy as np
+import tensorflow as tf
 from scipy.linalg import sqrtm
 from tensorflow.keras.applications import InceptionV3
+from models.cvae import CVAE
+from preprocessing import dataloader
 
 
 def log_normal_pdf(sample, mean, logvar, raxis=1):
@@ -69,7 +69,7 @@ def generate_images(model, batch):
     return predictions
 
 
-def generate_and_save_images(step, epoch, batch, predictions, folder):
+def show_images(step, epoch, batch, predictions, folder):
     batch_imgs, batch_imgs_masked, batch_labels = batch
     num_col = batch_imgs.shape[0]
     plt.figure(figsize=(num_col, 3))
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     # assert batch_size >= num_examples_to_generate
     test_batch = next(ds_val)
     predictions = generate_images(model, test_batch)
-    generate_and_save_images(0, 0, test_batch, predictions, 'train')
+    show_images(0, 0, test_batch, predictions, 'train')
 
     # Iterate over epochs.
     for epoch in range(1, epochs + 1):
@@ -165,7 +165,7 @@ if __name__ == "__main__":
                 print("step %d: mean val loss = %.4f" % (step, val_loss.result()))
                 print("step %d: mean train FID = %.4f" % (step, train_fid.result()))
                 print("step %d: mean val FID = %.4f" % (step, val_fid.result()))
-                generate_and_save_images(step, epoch, test_batch, train_pred, 'train')
+                show_images(step, epoch, test_batch, train_pred, 'train')
                 save_path = manager.save()
                 print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
             if step == num_steps:
