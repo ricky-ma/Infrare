@@ -17,12 +17,13 @@ def train_step(model, x, optimizer):
     update the model's parameters.
     """
     if model.architecture == "VPGA":
-        with tf.GradientTape() as tape:
+        with tf.GradientTape(persistent=True) as tape:
             enc_loss, dec_loss = model.compute_loss(x)
             loss = enc_loss + dec_loss
         enc_grads = tape.gradient(enc_loss, model.trainable_variables)
         dec_grads = tape.gradient(dec_loss, model.trainable_variables)
         optimizer.apply_gradients(zip(enc_grads + dec_grads, model.trainable_variables))
+        del tape
     else:
         with tf.GradientTape() as tape:
             loss = model.compute_loss(x)
@@ -32,10 +33,10 @@ def train_step(model, x, optimizer):
 
 
 # calculate frechet inception distance
-def compute_fid(model, images1, images2):
+def compute_fid(incept_model, images1, images2):
     # calculate activations
-    act1 = model.predict(images1)
-    act2 = model.predict(images2)
+    act1 = incept_model.predict(images1)
+    act2 = incept_model.predict(images2)
     # calculate mean and covariance statistics
     mu1, sigma1 = act1.mean(axis=0), np.cov(act1, rowvar=False)
     mu2, sigma2 = act2.mean(axis=0), np.cov(act2, rowvar=False)
@@ -88,7 +89,7 @@ if __name__ == "__main__":
     batch_size = 10
     epochs = 2
     latent_dim = 32
-    optimizer = tf.keras.optimizers.Adam(1e-3)
+    adam_optimizer = tf.keras.optimizers.Adam(1e-3)
 
     # load and augment training data
     ds_train = dataloader(classes, data_dir, input_image_size, batch_size, 'val2017')
@@ -96,10 +97,10 @@ if __name__ == "__main__":
 
     # Initialize and compile model
     # model = VAE(latent_dim, input_image_size)
-    model = VPGA(latent_dim, input_image_size, zn_rec_coeff=0.06, zh_rec_coeff=0, vrec_coeff=0.01, vkld_coeff=0.02)
+    vae_model = VPGA(latent_dim, input_image_size, zn_rec_coeff=0.06, zh_rec_coeff=0, vrec_coeff=0.01, vkld_coeff=0.02)
     model_incept = InceptionV3(include_top=False, pooling='avg', input_shape=input_image_size)
     callback_list = [tf.keras.callbacks.TensorBoard(log_dir=log_dir)]
-    TC = tf.keras.callbacks.CallbackList(callbacks=callback_list, model=model)
+    TC = tf.keras.callbacks.CallbackList(callbacks=callback_list, model=vae_model)
 
     # Set up logs for Tensorboard
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -107,14 +108,14 @@ if __name__ == "__main__":
     test_log_dir = log_dir + '/gradient_tape/' + current_time + '/test'
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
     test_summary_writer = tf.summary.create_file_writer(test_log_dir)
-    ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model)
+    ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=adam_optimizer, net=vae_model)
     manager = tf.train.CheckpointManager(ckpt, "vae/checkpoints", max_to_keep=5)
 
     # Pick a sample of the test set for generating output images
     # assert batch_size >= num_examples_to_generate
     test_batch = next(ds_val)
-    predictions = generate_images(model, test_batch)
-    show_images(0, 0, test_batch, predictions, 'train')
+    preds = generate_images(vae_model, test_batch)
+    show_images(0, 0, test_batch, preds, 'train')
 
     # Iterate over epochs.
     for epoch in range(1, epochs + 1):
@@ -132,12 +133,12 @@ if __name__ == "__main__":
             val_imgs, val_imgs_masked, val_labels = val_x
 
             # Calculate reconstruction error on training and validation set
-            train_loss(train_step(model, train_imgs_masked, optimizer))
-            val_loss(model.compute_loss(val_imgs_masked))
+            train_loss(train_step(vae_model, train_imgs_masked, adam_optimizer))
+            val_loss(vae_model.compute_loss(val_imgs_masked))
 
             # Generate samples and compute FID
-            train_pred = generate_images(model, train_x)
-            val_pred = generate_images(model, val_x)
+            train_pred = generate_images(vae_model, train_x)
+            val_pred = generate_images(vae_model, val_x)
             train_fid(compute_fid(model_incept, train_imgs_masked, train_pred))
             val_fid(compute_fid(model_incept, val_imgs_masked, val_pred))
 
@@ -149,6 +150,11 @@ if __name__ == "__main__":
             with test_summary_writer.as_default():
                 tf.summary.scalar('loss', val_loss.result(), step=step)
                 tf.summary.scalar('FID', val_fid.result(), step=step)
+
+            print("step %d: mean train loss = %.4f" % (step, train_loss.result()))
+            print("step %d: mean val loss = %.4f" % (step, val_loss.result()))
+            print("step %d: mean train FID = %.4f" % (step, train_fid.result()))
+            print("step %d: mean val FID = %.4f" % (step, val_fid.result()))
 
             # Print progress and display images
             if step % 200 == 0:

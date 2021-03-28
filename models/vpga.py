@@ -18,7 +18,6 @@ class VPGA(tf.keras.Model):
         self.encoder = tf.keras.Sequential(
             [
                 tf.keras.layers.InputLayer(input_shape=input_shape),
-                # tf.keras.layers.Lambda(lambda x: tf.cast(x, tf.float32)),
                 tf.keras.layers.Conv2D(
                     filters=32, kernel_size=3, strides=2, activation='relu'),
                 tf.keras.layers.Conv2D(
@@ -39,17 +38,13 @@ class VPGA(tf.keras.Model):
                 tf.keras.layers.Dense(units=16 * 16 * 32, activation=tf.nn.relu),
                 tf.keras.layers.Reshape(target_shape=(16, 16, 32)),
                 tf.keras.layers.Conv2DTranspose(
-                    filters=256, kernel_size=4, strides=2, padding='same',
-                    activation='relu'),
+                    filters=256, kernel_size=4, strides=2, padding='same', activation='relu'),
                 tf.keras.layers.Conv2DTranspose(
-                    filters=128, kernel_size=3, strides=2, padding='same',
-                    activation='relu'),
+                    filters=128, kernel_size=3, strides=2, padding='same', activation='relu'),
                 tf.keras.layers.Conv2DTranspose(
-                    filters=64, kernel_size=3, strides=2, padding='same',
-                    activation='relu'),
+                    filters=64, kernel_size=3, strides=2, padding='same', activation='relu'),
                 tf.keras.layers.Conv2DTranspose(
-                    filters=32, kernel_size=3, strides=2, padding='same',
-                    activation='relu'),
+                    filters=32, kernel_size=3, strides=2, padding='same', activation='relu'),
                 # No activation
                 tf.keras.layers.Conv2DTranspose(
                     filters=3, kernel_size=3, strides=1, padding='same'),
@@ -104,18 +99,17 @@ class VPGA(tf.keras.Model):
                           self.dec_enc(tf.stop_gradient(z_mu) + z_noise, True)
 
         # Image reconstruction loss
-        img_rec_loss = tf.keras.losses.MSE(x, img_rec)
+        img_rec_loss = tf.reduce_mean(tf.keras.losses.MSE(x, img_rec))
         # Latent reconstruction loss under a multivariate normal distribution, N
-        zn_rec_loss = tf.keras.losses.MSE(zn_targ, zn_rec)
+        zn_rec_loss = tf.reduce_mean(tf.keras.losses.MSE(zn_targ, zn_rec))
         # Latent reconstruction loss under a latent-target distribution, H
-        zh_rec_loss = tf.keras.losses.MSE(zh_targ, zh_rec)
+        zh_rec_loss = tf.reduce_mean(tf.keras.losses.MSE(zh_targ, zh_rec))
         z_mu_norm = tf.stop_gradient(tf.sqrt(tf.reduce_mean(tf.square(z_mu), 0)))
         # VAE reconstruction loss
-        vrec_loss = tf.keras.losses.MSE(z_mu_rec / z_mu_norm, z_rec / z_mu_norm)
+        vrec_loss = tf.reduce_mean(tf.keras.losses.MSE(z_mu_rec / z_mu_norm, z_rec / z_mu_norm))
         # VAE KL divergence loss
         vkld_loss = -tf.reduce_mean(0.5 * (1 + z_log_sigma_sq - z_mu ** 2 - tf.exp(z_log_sigma_sq)))
 
-        # TODO: fix loss calculation
         latent_loss = (self.zn_rec_coeff * zn_rec_loss) + (self.zh_rec_coeff * zh_rec_loss)
         vae_loss = (self.vrec_coeff * vrec_loss) + (self.vkld_coeff * vkld_loss)
 
