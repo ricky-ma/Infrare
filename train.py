@@ -7,6 +7,7 @@ from scipy.linalg import sqrtm
 from tensorflow.keras.applications import InceptionV3
 from models.cvae import CVAE
 from models.vae import VAE
+from models.vpga import VPGA
 from preprocessing import dataloader
 
 
@@ -17,10 +18,18 @@ def train_step(model, x, optimizer):
     This function computes the loss and gradients, and uses the latter to
     update the model's parameters.
     """
-    with tf.GradientTape() as tape:
-        loss = model.compute_loss(x)
-    gradients = tape.gradient(loss, model.trainable_variables)
-    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+    if model.architecture == "VPGA":
+        with tf.GradientTape() as tape:
+            enc_loss, dec_loss = model.compute_loss(x)
+            loss = enc_loss + dec_loss
+        enc_grads = tape.gradient(enc_loss, model.trainable_variables)
+        dec_grads = tape.gradient(dec_loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(enc_grads + dec_grads, model.trainable_variables))
+    else:
+        with tf.GradientTape() as tape:
+            loss = model.compute_loss(x)
+        gradients = tape.gradient(loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
     return loss
 
 
@@ -88,7 +97,8 @@ if __name__ == "__main__":
     ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2017')
 
     # Initialize and compile model
-    model = VAE(latent_dim, input_image_size)
+    # model = VAE(latent_dim, input_image_size)
+    model = VPGA(latent_dim, input_image_size, zn_rec_coeff=0.06, zh_rec_coeff=0, vrec_coeff=0.01, vkld_coeff=0.02)
     model_incept = InceptionV3(include_top=False, pooling='avg', input_shape=input_image_size)
     callback_list = [tf.keras.callbacks.TensorBoard(log_dir=log_dir)]
     TC = tf.keras.callbacks.CallbackList(callbacks=callback_list, model=model)
