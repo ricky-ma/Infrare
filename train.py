@@ -8,6 +8,13 @@ from tensorflow.keras.applications import InceptionV3
 from models import VAE, CVAE, VPGA
 from preprocessing import dataloader
 
+physical_devices = tf.config.list_physical_devices('GPU')
+try:
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+except:
+    # Invalid device or cannot modify virtual devices once initialized.
+    pass
+
 
 @tf.function
 def train_step(model, x, optimizer):
@@ -74,14 +81,15 @@ def show_images(step, epoch, batch, predictions, folder):
         plt.subplot(3, num_col, i + 1 + num_col + num_col)
         plt.imshow(predictions[i, :, :, :])
         plt.axis('off')
+
         fig.set_title(int(batch_labels[i]))
     plt.savefig('vae/{}_out/step{:04d}_epoch{:04d}.png'.format(folder, step, epoch))
     plt.show()
 
 
 if __name__ == "__main__":
-    data_dir = 'coco2017'
-    classes = ['airplane']
+    data_dir = 'data/coco2017'
+    classes = ['orange']
     model_dir = 'vae/'
     log_dir = 'logs'
     input_image_size = (256, 256, 3)
@@ -92,11 +100,11 @@ if __name__ == "__main__":
     adam_optimizer = tf.keras.optimizers.Adam(1e-3)
 
     # load and augment training data
-    ds_train = dataloader(classes, data_dir, input_image_size, batch_size, 'val2017')
-    ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2017')
+    ds_train = dataloader(classes, data_dir, input_image_size, batch_size, 'train2019')
+    ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2019')
 
     # Initialize and compile model
-    # model = VAE(latent_dim, input_image_size)
+    # vae_model = VAE(latent_dim, input_image_size)
     vae_model = VPGA(latent_dim, input_image_size, zn_rec_coeff=0.06, zh_rec_coeff=0, vrec_coeff=0.01, vkld_coeff=0.02)
     model_incept = InceptionV3(include_top=False, pooling='avg', input_shape=input_image_size)
     callback_list = [tf.keras.callbacks.TensorBoard(log_dir=log_dir)]
@@ -136,33 +144,31 @@ if __name__ == "__main__":
             train_loss(train_step(vae_model, train_imgs_masked, adam_optimizer))
             val_loss(vae_model.compute_loss(val_imgs_masked))
 
-            # Generate samples and compute FID
-            train_pred = generate_images(vae_model, train_x)
-            val_pred = generate_images(vae_model, val_x)
-            train_fid(compute_fid(model_incept, train_imgs_masked, train_pred))
-            val_fid(compute_fid(model_incept, val_imgs_masked, val_pred))
-
             # Log losses for Tensorboard viz
             ckpt.step.assign_add(1)
             with train_summary_writer.as_default():
                 tf.summary.scalar('loss', train_loss.result(), step=step)
-                tf.summary.scalar('FID', train_fid.result(), step=step)
             with test_summary_writer.as_default():
                 tf.summary.scalar('loss', val_loss.result(), step=step)
-                tf.summary.scalar('FID', val_fid.result(), step=step)
-
-            print("step %d: mean train loss = %.4f" % (step, train_loss.result()))
-            print("step %d: mean val loss = %.4f" % (step, val_loss.result()))
-            print("step %d: mean train FID = %.4f" % (step, train_fid.result()))
-            print("step %d: mean val FID = %.4f" % (step, val_fid.result()))
 
             # Print progress and display images
-            if step % 200 == 0:
+            if step % 50 == 0:
+                # Generate samples and compute FID
+                test_pred = generate_images(vae_model, test_batch)
+                train_pred = generate_images(vae_model, train_x)
+                val_pred = generate_images(vae_model, val_x)
+                train_fid(compute_fid(model_incept, train_imgs_masked, train_pred))
+                val_fid(compute_fid(model_incept, val_imgs_masked, val_pred))
+                with train_summary_writer.as_default():
+                    tf.summary.scalar('FID', train_fid.result(), step=step)
+                with test_summary_writer.as_default():
+                    tf.summary.scalar('FID', val_fid.result(), step=step)
+
                 print("step %d: mean train loss = %.4f" % (step, train_loss.result()))
                 print("step %d: mean val loss = %.4f" % (step, val_loss.result()))
                 print("step %d: mean train FID = %.4f" % (step, train_fid.result()))
                 print("step %d: mean val FID = %.4f" % (step, val_fid.result()))
-                show_images(step, epoch, test_batch, train_pred, 'train')
+                show_images(step, epoch, test_batch, test_pred, 'train')
                 save_path = manager.save()
                 print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
             if step == num_steps:

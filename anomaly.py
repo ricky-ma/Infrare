@@ -5,11 +5,12 @@ from preprocessing import dataloader
 from train import show_images, generate_images
 
 if __name__ == "__main__":
-    data_dir = 'coco2017'
-    classes = ['orange']
-    mode = 'val2019'
+    data_dir = 'data/coco2017'
+    classes = ['pizza']
+    mode = 'val2017'
     model_dir = 'vae/'
     log_dir = 'logs'
+    ckpt_dir = 'vae/checkpoints'
     input_image_size = (256, 256, 3)
     batch_size = 1
     latent_dim = 32
@@ -26,7 +27,7 @@ if __name__ == "__main__":
     model = CVAE(latent_dim, input_image_size)
     optimizer = tf.keras.optimizers.Adam(1e-3)
     ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model)
-    manager = tf.train.CheckpointManager(ckpt, "vae/checkpoints", max_to_keep=5)
+    manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=5)
     ckpt.restore(manager.latest_checkpoint)
 
     losses = []
