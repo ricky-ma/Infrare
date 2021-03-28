@@ -7,6 +7,7 @@ class VAE(tf.keras.Model):
 
     def __init__(self, latent_dim, input_shape):
         super(VAE, self).__init__()
+        self.architecture = "VAE"
         self.latent_dim = latent_dim
         self.encoder = tf.keras.Sequential(
             [
