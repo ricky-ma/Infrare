@@ -1,8 +1,8 @@
 import datetime
 import tensorflow as tf
-from models.cvae import CVAE
+from models import VAE, CVAE, VPGA
 from preprocessing import dataloader
-from train import compute_loss, show_images, generate_images
+from train import show_images, generate_images
 
 if __name__ == "__main__":
     data_dir = 'coco2017'
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     loss = tf.keras.metrics.Mean()
     for step, test_x in enumerate(ds_test):
         img, label = test_x
-        step_loss = compute_loss(model, img)
+        step_loss = model.compute_loss(img)
         loss(step_loss)
         with test_summary_writer.as_default():
             tf.summary.scalar('loss', loss.result(), step=step)

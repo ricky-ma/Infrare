@@ -5,9 +5,7 @@ import numpy as np
 import tensorflow as tf
 from scipy.linalg import sqrtm
 from tensorflow.keras.applications import InceptionV3
-from models.cvae import CVAE
-from models.vae import VAE
-from models.vpga import VPGA
+from models import VAE, CVAE, VPGA
 from preprocessing import dataloader
 
 
