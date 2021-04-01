@@ -5,15 +5,8 @@ import numpy as np
 import tensorflow as tf
 from scipy.linalg import sqrtm
 from tensorflow.keras.applications import InceptionV3
-from models import VAE, CVAE, VPGA, MemCAE
+from models import VAE, CVAE, VPGA, MemCAE, AE, CAE
 from preprocessing import dataloader
-
-physical_devices = tf.config.list_physical_devices('GPU')
-try:
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
-except:
-    # Invalid device or cannot modify virtual devices once initialized.
-    pass
 
 
 @tf.function
@@ -63,6 +56,8 @@ def generate_images(model, batch):
     batch_imgs, batch_imgs_masked, batch_labels = batch
     if model.architecture == "MemCAE":
         z, c = model.encode(batch_imgs_masked)
+    elif model.architecture in ("AE", "CAE"):
+        z = model.encode(batch_imgs_masked)
     else:
         mean, logvar = model.encode(batch_imgs_masked)
         z = model.reparameterize(mean, logvar)
@@ -92,7 +87,7 @@ def show_images(step, epoch, batch, predictions, folder):
 
 if __name__ == "__main__":
     data_dir = 'data/coco2017'
-    classes = ['orange']
+    classes = ['dog']
     model_dir = 'vae/'
     log_dir = 'logs'
     input_image_size = (256, 256, 3)
@@ -107,8 +102,8 @@ if __name__ == "__main__":
     ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2019')
 
     # Initialize and compile model
-    vae_model = MemCAE(latent_dim, True, input_image_size, batch_size)
-    # vae_model = VPGA(latent_dim, input_image_size, zn_rec_coeff=0.06, zh_rec_coeff=0, vrec_coeff=0.01, vkld_coeff=0.02)
+    vae_model = AE(latent_dim, input_image_size)
+    # vae_model = MemCAE(latent_dim, True, input_image_size, batch_size)
     model_incept = InceptionV3(include_top=False, pooling='avg', input_shape=input_image_size)
     callback_list = [tf.keras.callbacks.TensorBoard(log_dir=log_dir)]
     TC = tf.keras.callbacks.CallbackList(callbacks=callback_list, model=vae_model)
