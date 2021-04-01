@@ -5,13 +5,14 @@ tf.config.run_functions_eagerly(True)
 class MemCAE(tf.keras.Model):
     """Memory-augmented convolutional autoencoder."""
 
-    def __init__(self, latent_dim, training, input_shape, batch_size):
+    def __init__(self, latent_dim, training, input_shape, batch_size, mem_size):
         super(MemCAE, self).__init__()
         self.architecture = "MemCAE"
         self.latent_dim = latent_dim
         self.training = training
         self.input_img_shape = input_shape
         self.batch_size = batch_size
+        self.mem_size = mem_size
         self.name_bank, self.params_trainable, self.conv_shapes = [], [], []
         self.initializer = tf.initializers.glorot_normal()
 
@@ -45,19 +46,17 @@ class MemCAE(tf.keras.Model):
         return z, c
 
     def memory(self, z, c):
-        N = 2000
-        w_memory = self.get_weight(vshape=[1, 1, N, c], bias=False, name="memory")
+        w_memory = self.get_weight(vshape=[1, 1, self.mem_size, c], bias=False, name="memory")
         cosim = self.cosine_sim(x1=z, x2=w_memory)  # Eq.5
         attention = tf.nn.softmax(cosim)  # Eq.4
 
-        lam = 1 / N  # deactivate the 1/N of N memories.
+        lam = 1 / self.mem_size  # deactivate the 1/N of N memories.
 
         addr_num = tf.keras.activations.relu(attention - lam) * attention
         addr_denum = tf.abs(attention - lam) + 1e-12
         memory_addr = addr_num / addr_denum
 
         renorm = tf.clip_by_value(memory_addr, 1e-12, 1 - 1e-12)
-
         z_hat = tf.linalg.matmul(renorm, w_memory)
         return z_hat, renorm
 
