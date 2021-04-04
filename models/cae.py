@@ -7,7 +7,7 @@ class CAE(tf.keras.Model):
 
     def __init__(self, latent_dim, input_shape):
         super(CAE, self).__init__()
-        self.architecture = "CVAE"
+        self.architecture = "CAE"
         self.latent_dim = latent_dim
         self.encoder = tf.keras.Sequential(
             [
