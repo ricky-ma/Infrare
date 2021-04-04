@@ -1,16 +1,15 @@
 import datetime
 import tensorflow as tf
-from models import VAE, CVAE, VPGA
+from models import VAE, CVAE, VPGA, MemCAE
 from preprocessing import dataloader
 from train import show_images, generate_images
 
 if __name__ == "__main__":
     data_dir = 'data/coco2017'
-    classes = ['pizza']
-    mode = 'val2017'
-    model_dir = 'vae/'
+    classes = ['dog']
+    mode = 'val2019'
     log_dir = 'logs'
-    ckpt_dir = 'vae/checkpoints'
+    ckpt_dir = 'output/checkpoints'
     input_image_size = (256, 256, 3)
     batch_size = 1
     latent_dim = 32
@@ -24,7 +23,7 @@ if __name__ == "__main__":
     test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
     # Initialize model from checkpoint
-    model = CVAE(latent_dim, input_image_size)
+    model = MemCAE(latent_dim, False, input_image_size, batch_size, 500)
     optimizer = tf.keras.optimizers.Adam(1e-3)
     ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model)
     manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=5)
@@ -36,8 +35,8 @@ if __name__ == "__main__":
     # Calculate reconstruction error for each example
     loss = tf.keras.metrics.Mean()
     for step, test_x in enumerate(ds_test):
-        img, label = test_x
-        step_loss = model.compute_loss(img)
+        img, img_masked, label = test_x
+        step_loss = model.compute_loss(img_masked)
         loss(step_loss)
         with test_summary_writer.as_default():
             tf.summary.scalar('loss', loss.result(), step=step)

@@ -81,19 +81,19 @@ def show_images(step, epoch, batch, predictions, folder):
         plt.axis('off')
 
         fig.set_title(int(batch_labels[i]))
-    plt.savefig('vae/{}_out/step{:04d}_epoch{:04d}.png'.format(folder, step, epoch))
+    plt.savefig('output/{}_out/step{:04d}_epoch{:04d}.png'.format(folder, step, epoch))
     plt.show()
 
 
 if __name__ == "__main__":
     data_dir = 'data/coco2017'
-    classes = ['dog']
-    model_dir = 'vae/'
+    classes = ['orange']
+    model_dir = 'output/'
     log_dir = 'logs'
     input_image_size = (256, 256, 3)
     num_steps = 6000
     batch_size = 10
-    epochs = 2
+    epochs = 1
     latent_dim = 32
     adam_optimizer = tf.keras.optimizers.Adam(1e-3)
 
@@ -102,26 +102,27 @@ if __name__ == "__main__":
     ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2019')
 
     # Initialize and compile model
-    vae_model = AE(latent_dim, input_image_size)
+    # vae_model = AE(latent_dim, input_image_size)
+    # vae_model = CAE(latent_dim, input_image_size)
+    # vae_model = VAE(latent_dim, input_image_size)
+    vae_model = CVAE(latent_dim, input_image_size)
     # vae_model = MemCAE(latent_dim, True, input_image_size, batch_size)
     model_incept = InceptionV3(include_top=False, pooling='avg', input_shape=input_image_size)
     callback_list = [tf.keras.callbacks.TensorBoard(log_dir=log_dir)]
     TC = tf.keras.callbacks.CallbackList(callbacks=callback_list, model=vae_model)
 
     # Set up logs for Tensorboard
-    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    train_log_dir = log_dir + '/gradient_tape/' + current_time + '/train'
-    test_log_dir = log_dir + '/gradient_tape/' + current_time + '/test'
+    train_log_dir = log_dir + '/gradient_tape/' + vae_model.architecture + '/multi/train'
+    test_log_dir = log_dir + '/gradient_tape/' + vae_model.architecture + '/multi/test'
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
     test_summary_writer = tf.summary.create_file_writer(test_log_dir)
     ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=adam_optimizer, net=vae_model)
-    manager = tf.train.CheckpointManager(ckpt, "vae/checkpoints", max_to_keep=5)
+    manager = tf.train.CheckpointManager(ckpt, "output/checkpoints", max_to_keep=5)
 
     # Pick a sample of the test set for generating output images
     # assert batch_size >= num_examples_to_generate
     test_batch = next(ds_val)
     preds = generate_images(vae_model, test_batch)
-    show_images(0, 0, test_batch, preds, 'train')
 
     # Iterate over epochs.
     for epoch in range(1, epochs + 1):
@@ -150,7 +151,7 @@ if __name__ == "__main__":
                 tf.summary.scalar('loss', val_loss.result(), step=step)
 
             # Print progress and display images
-            if step % 50 == 0:
+            if step % 100 == 0:
                 # Generate samples and compute FID
                 test_pred = generate_images(vae_model, test_batch)
                 train_pred = generate_images(vae_model, train_x)
@@ -167,6 +168,7 @@ if __name__ == "__main__":
                 print("step %d: mean train FID = %.4f" % (step, train_fid.result()))
                 print("step %d: mean val FID = %.4f" % (step, val_fid.result()))
                 show_images(step, epoch, test_batch, test_pred, 'train')
+                show_images(step, epoch, val_x, val_pred, 'val')
                 save_path = manager.save()
                 print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
             if step == num_steps:
