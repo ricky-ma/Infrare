@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 from scipy.linalg import sqrtm
 from tensorflow.keras.applications import InceptionV3
-from models import VAE, CVAE, AE, CAE
+from models import VAE, CVAE, AE, CAE, MemCAE
 from preprocessing import dataloader
 
 
@@ -99,7 +99,10 @@ def train(model, class_label, num_steps, epochs, optimizer):
     test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
     # Set up checkpoint manager
-    ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model)
+    if model.architecture == "MemCAE":
+        ckpt = model.get_ckpt()
+    else:
+        ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model)
     ckpt_dir = 'output/{}/{}/checkpoints'.format(model.architecture, class_label)
     manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=5)
 
@@ -172,11 +175,11 @@ def train(model, class_label, num_steps, epochs, optimizer):
 
 if __name__ == "__main__":
     data_dir = 'data/coco2017'
-    model_dir = 'output/'
     log_dir = 'logs'
     input_image_size = (256, 256, 3)
     batch_size = 10
     latent_dim = 32
+    optimizer = tf.keras.optimizers.Adam(1e-3)
 
     # Initialize and compile models
     incept_model = InceptionV3(include_top=False, pooling='avg', input_shape=input_image_size)
@@ -184,15 +187,15 @@ if __name__ == "__main__":
     cae_model = CAE(latent_dim, input_image_size)
     vae_model = VAE(latent_dim, input_image_size)
     cvae_model = CVAE(latent_dim, input_image_size)
-    # memcae_model = MemCAE(latent_dim, True, input_image_size, batch_size)
+    memcae_model = MemCAE(latent_dim, True, input_image_size, batch_size, 500, optimizer)
 
-    for classes in [['all']]:
+    for classes in [['cat']]:
         # Load and augment training data
         ds_train = dataloader(classes, data_dir, input_image_size, batch_size, 'train2019')
         ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2019')
         class_label = classes[0] if len(classes) == 1 else "similar"
 
         # Train each model for comparison
-        for m in [cvae_model, ae_model, cae_model, vae_model]:
+        for m in [memcae_model]:
             print("Training {} on {} class...".format(m.architecture, class_label))
             train(m, class_label, num_steps=8000, epochs=1, optimizer=tf.keras.optimizers.Adam(1e-3))

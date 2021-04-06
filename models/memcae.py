@@ -5,7 +5,7 @@ tf.config.run_functions_eagerly(True)
 class MemCAE(tf.keras.Model):
     """Memory-augmented convolutional autoencoder."""
 
-    def __init__(self, latent_dim, training, input_shape, batch_size, mem_size):
+    def __init__(self, latent_dim, training, input_shape, batch_size, mem_size, optimizer):
         super(MemCAE, self).__init__()
         self.architecture = "MemCAE"
         self.latent_dim = latent_dim
@@ -13,10 +13,18 @@ class MemCAE(tf.keras.Model):
         self.input_img_shape = input_shape
         self.batch_size = batch_size
         self.mem_size = mem_size
+        self.optimizer = optimizer
         self.name_bank, self.params_trainable, self.conv_shapes = [], [], []
         self.initializer = tf.initializers.glorot_normal()
 
-    # @tf.function
+    def get_ckpt(self):
+        vars_to_save = {}
+        for idx, name in enumerate(self.name_bank):
+            vars_to_save[self.name_bank[idx]] = self.params_trainable[idx]
+        vars_to_save["optimizer"] = self.optimizer
+        ckpt = tf.train.Checkpoint(**vars_to_save, step=tf.Variable(1), net=self)
+        return ckpt
+
     def sample(self, eps=None):
         if eps is None:
             eps = tf.random.normal(shape=self.input_img_shape)

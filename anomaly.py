@@ -6,11 +6,11 @@ from train import show_images, generate_images
 
 if __name__ == "__main__":
     data_dir = 'data/coco2017'
-    classes = ['dog']
+    classes = ['cat']
     mode = 'val2019'
     log_dir = 'logs'
-    anomaly_dir = 'MemCAE/dog/anomaly'
-    ckpt_dir = 'output/MemCAE/dog/checkpoints'
+    anomaly_dir = 'MemCAE/cat/anomaly'
+    ckpt_dir = 'output/MemCAE/cat/checkpoints'
     input_image_size = (256, 256, 3)
     batch_size = 1
     latent_dim = 32
@@ -27,11 +27,11 @@ if __name__ == "__main__":
     optimizer = tf.keras.optimizers.Adam(1e-3)
     model = MemCAE(latent_dim, False, input_image_size, batch_size, 500, optimizer)
     if model.architecture == 'MemCAE':
-        model.load_params(ckpt_dir)
+        ckpt = model.get_ckpt()
     else:
         ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model)
-        manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=5)
-        ckpt.restore(manager.latest_checkpoint)
+    manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=5)
+    ckpt.restore(manager.latest_checkpoint)
 
     losses = []
     labels = []
