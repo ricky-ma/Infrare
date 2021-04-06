@@ -9,7 +9,8 @@ if __name__ == "__main__":
     classes = ['dog']
     mode = 'val2019'
     log_dir = 'logs'
-    ckpt_dir = 'output/checkpoints'
+    anomaly_dir = 'MemCAE/dog/anomaly'
+    ckpt_dir = 'output/MemCAE/dog/checkpoints'
     input_image_size = (256, 256, 3)
     batch_size = 1
     latent_dim = 32
@@ -23,15 +24,17 @@ if __name__ == "__main__":
     test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
     # Initialize model from checkpoint
-    model = MemCAE(latent_dim, False, input_image_size, batch_size, 500)
     optimizer = tf.keras.optimizers.Adam(1e-3)
-    ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model)
-    manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=5)
-    ckpt.restore(manager.latest_checkpoint)
+    model = MemCAE(latent_dim, False, input_image_size, batch_size, 500, optimizer)
+    if model.architecture == 'MemCAE':
+        model.load_params(ckpt_dir)
+    else:
+        ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model)
+        manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=5)
+        ckpt.restore(manager.latest_checkpoint)
 
     losses = []
     labels = []
-
     # Calculate reconstruction error for each example
     loss = tf.keras.metrics.Mean()
     for step, test_x in enumerate(ds_test):
@@ -40,16 +43,18 @@ if __name__ == "__main__":
         loss(step_loss)
         with test_summary_writer.as_default():
             tf.summary.scalar('loss', loss.result(), step=step)
-        print("step %d: loss = %.4f" % (step, step_loss))
 
         # Store losses and labels of each example
         losses.append(step_loss)
         labels.append(label)
-
-        # Outlier/anomaly if loss for example is 2x mean loss
-        if step_loss > 2*loss.result():
-            pred = generate_images(model, test_x)
-            show_images(step, 0, test_x, pred, 'anomaly')
-
-        if step == 200:
+        if step == 100:
             break
+
+    # Outlier/anomaly if loss for example is 2x mean loss
+    threshold = 1.05 * sum(losses) / len(losses)
+    print("Threshold={}".format(threshold))
+    for step, (step_loss, test_x) in enumerate(zip(losses, ds_test)):
+        if step_loss > threshold:
+            pred = generate_images(model, test_x)
+            show_images(step, 0, test_x, pred, anomaly_dir)
+            print("step %d: loss = %.4f" % (step, step_loss))
