@@ -97,7 +97,7 @@ def get_binary_masks(image_obj, coco, cat_ids, input_image_size):
             train_mask = cv2.resize(mask, input_image_size)
 
         masks.append(train_mask)
-        labels.append(anns[0]['category_id'])
+        labels.append(coco.loadCats(anns[0]['category_id'])[0]['name'])
         polygons.append(polygon)
     return masks, labels, polygons
 
@@ -140,7 +140,7 @@ def data_generator(images, classes, coco, folder, input_image_size=(224, 224, 3)
     while True:
         img = np.zeros((batch_size, input_image_size[0], input_image_size[1], 3)).astype('float')
         img_masked = np.zeros((batch_size, input_image_size[0], input_image_size[1], 3)).astype('float')
-        label = np.empty(batch_size)
+        label = [None]*batch_size
         for i in range(c, c + batch_size):  # initially from 0 to batch_size, when c = 0
             image_obj = images[i]
             # Retrieve and mask image

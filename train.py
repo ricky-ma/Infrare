@@ -69,6 +69,7 @@ def show_images(step, epoch, batch, predictions, folder):
     batch_imgs, batch_imgs_masked, batch_labels = batch
     num_col = batch_imgs.shape[0]
     plt.figure(figsize=(num_col, 3))
+
     for i in range(num_col):
         fig = plt.subplot(3, num_col, i + 1)
         plt.imshow(batch_imgs[i, :, :, :])
@@ -79,8 +80,7 @@ def show_images(step, epoch, batch, predictions, folder):
         plt.subplot(3, num_col, i + 1 + num_col + num_col)
         plt.imshow(predictions[i, :, :, :])
         plt.axis('off')
-
-        fig.set_title(int(batch_labels[i]))
+        fig.set_title(batch_labels[i])
 
     folder = 'output/{}'.format(folder)
     if not os.path.exists(folder):
@@ -89,12 +89,7 @@ def show_images(step, epoch, batch, predictions, folder):
     plt.show()
 
 
-def train(model, train_classes, num_steps, epochs, optimizer):
-    if len(train_classes) == 1:
-        class_label = train_classes[0]
-    else:
-        class_label = "multi"
-
+def train(model, class_label, num_steps, epochs, optimizer):
     # Set up logs for Tensorboard
     callback_list = [tf.keras.callbacks.TensorBoard(log_dir=log_dir)]
     TC = tf.keras.callbacks.CallbackList(callbacks=callback_list, model=model)
@@ -191,11 +186,13 @@ if __name__ == "__main__":
     cvae_model = CVAE(latent_dim, input_image_size)
     # memcae_model = MemCAE(latent_dim, True, input_image_size, batch_size)
 
-    for classes in [['orange'], ['broccoli', 'banana', 'carrot', 'orange', 'apple']]:
+    for classes in [['all']]:
         # Load and augment training data
         ds_train = dataloader(classes, data_dir, input_image_size, batch_size, 'train2019')
         ds_val = dataloader(classes, data_dir, input_image_size, batch_size, 'val2019')
+        class_label = classes[0] if len(classes) == 1 else "similar"
 
         # Train each model for comparison
-        for m in [ae_model, cae_model, vae_model, cvae_model]:
-            train(m, classes, num_steps=6000, epochs=1, optimizer=tf.keras.optimizers.Adam(1e-3))
+        for m in [cvae_model, ae_model, cae_model, vae_model]:
+            print("Training {} on {} class...".format(m.architecture, class_label))
+            train(m, class_label, num_steps=8000, epochs=1, optimizer=tf.keras.optimizers.Adam(1e-3))
