@@ -14,6 +14,7 @@ if __name__ == "__main__":
     input_image_size = (256, 256, 3)
     batch_size = 1
     latent_dim = 32
+    num_anomalies = 5
 
     # Load and augment test data
     ds_test = dataloader(classes, data_dir, input_image_size, batch_size, mode)
@@ -34,7 +35,6 @@ if __name__ == "__main__":
     ckpt.restore(manager.latest_checkpoint)
 
     losses = []
-    labels = []
     # Calculate reconstruction error for each example
     loss = tf.keras.metrics.Mean()
     for step, test_x in enumerate(ds_test):
@@ -44,17 +44,16 @@ if __name__ == "__main__":
         with test_summary_writer.as_default():
             tf.summary.scalar('loss', loss.result(), step=step)
 
-        # Store losses and labels of each example
-        losses.append(step_loss)
-        labels.append(label)
+        # Store losses of each example
+        losses.append((step_loss, test_x))
         if step == 100:
             break
 
-    # Outlier/anomaly if loss for example is 2x mean loss
-    threshold = 1.05 * sum(losses) / len(losses)
-    print("Threshold={}".format(threshold))
-    for step, (step_loss, test_x) in enumerate(zip(losses, ds_test)):
-        if step_loss > threshold:
-            pred = generate_images(model, test_x)
-            show_images(step, 0, test_x, pred, anomaly_dir)
-            print("step %d: loss = %.4f" % (step, step_loss))
+    # Sort examples by losses and get top n anomalies
+    losses = sorted(losses, key=lambda x: x[0], reverse=True)
+    for step, (step_loss, test_x) in enumerate(losses):
+        pred = generate_images(model, test_x)
+        show_images(step, 0, test_x, pred, anomaly_dir)
+        print("step %d: loss = %.4f" % (step, step_loss))
+        if step > num_anomalies - 1:
+            break
