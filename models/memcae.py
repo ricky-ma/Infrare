@@ -15,7 +15,7 @@ class MemCAE(tf.keras.Model):
         self.mem_size = mem_size
         self.optimizer = optimizer
         self.name_bank, self.params_trainable, self.conv_shapes = [], [], []
-        self.initializer = tf.initializers.glorot_normal()
+        self.initializer = tf.initializers.RandomUniform()
 
     def get_ckpt(self):
         vars_to_save = {}
